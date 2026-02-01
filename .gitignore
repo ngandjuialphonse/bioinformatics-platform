@@ -1,0 +1,46 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+.terraform.lock.hcl
+crash.log
+crash.*.log
+
+# Nextflow
+nextflow.exe
+.nextflow/
+.nextflow.log*
+work/
+results/
+timeline.html
+report.html
+trace.txt
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+*.egg-info/
+
+# Data files (large files)
+*.fastq
+*.fastq.gz
+*.bam
+*.sam
+test_data/reference/genome.fa
+test_data/reference/star_index/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
