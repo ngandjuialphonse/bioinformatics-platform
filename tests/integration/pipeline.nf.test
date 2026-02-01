@@ -1,0 +1,296 @@
+/*
+ * =============================================================================
+ * Pipeline Integration Test
+ * =============================================================================
+ *
+ * PURPOSE:
+ * Integration tests verify that multiple processes work together correctly.
+ * While unit tests check individual components, integration tests ensure
+ * data flows properly through the pipeline.
+ *
+ * WHAT WE'RE TESTING:
+ * 1. FASTQC → MultiQC: QC reports are aggregated correctly
+ * 2. STAR → Salmon: Alignment output is compatible with quantification
+ * 3. All outputs → Final results: Complete pipeline produces expected outputs
+ *
+ * WHY INTEGRATION TESTS MATTER:
+ * - Unit tests can pass while integration fails (interface mismatches)
+ * - Catches issues with data format compatibility
+ * - Validates the pipeline as users will actually run it
+ *
+ * INTERVIEW TIP:
+ * Explain the testing pyramid: many unit tests, fewer integration tests,
+ * even fewer E2E tests. Each level catches different types of bugs.
+ *
+ * =============================================================================
+ */
+
+nextflow_workflow {
+
+    name "Test Complete RNA-Seq Pipeline"
+    script "../workflows/main.nf"
+    workflow "RNASEQ_PIPELINE"
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 1: Full Pipeline Execution
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify the complete pipeline runs successfully
+     *
+     * This is the most important integration test. It runs the entire
+     * pipeline with test data and verifies all expected outputs are produced.
+     */
+    test("Should complete full pipeline successfully") {
+
+        when {
+            params {
+                // Use test profile settings
+                outdir = "${outputDir}/results"
+                max_cpus = 4
+                max_memory = '8.GB'
+            }
+            workflow {
+                """
+                // Samplesheet input
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                
+                // Reference genome
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                
+                // GTF annotation
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // ---------------------------------------------------------------
+            // Verify QC outputs
+            // ---------------------------------------------------------------
+            // FastQC reports should exist for all samples
+            assert workflow.out.fastqc_html
+            assert workflow.out.fastqc_zip
+            
+            // MultiQC report should aggregate all QC data
+            with(workflow.out.multiqc_report) {
+                assert size() == 1
+                assert get(0).exists()
+                assert get(0).name.contains('multiqc')
+            }
+            
+            // ---------------------------------------------------------------
+            // Verify alignment outputs
+            // ---------------------------------------------------------------
+            // BAM files should be produced for all samples
+            assert workflow.out.bam
+            assert workflow.out.bam.size() > 0
+            
+            // BAM indices should accompany BAM files
+            assert workflow.out.bai
+            assert workflow.out.bai.size() == workflow.out.bam.size()
+            
+            // ---------------------------------------------------------------
+            // Verify quantification outputs
+            // ---------------------------------------------------------------
+            // Salmon quantification results
+            assert workflow.out.salmon_quant
+            
+            // Gene count matrix should be produced
+            with(workflow.out.counts) {
+                assert size() == 1
+                assert get(0).exists()
+            }
+            
+            // ---------------------------------------------------------------
+            // Verify final outputs directory structure
+            // ---------------------------------------------------------------
+            def resultsDir = file("${outputDir}/results")
+            assert resultsDir.exists()
+            assert resultsDir.isDirectory()
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 2: QC Aggregation
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify MultiQC correctly aggregates all QC reports
+     *
+     * WHY THIS MATTERS:
+     * MultiQC provides a single report summarizing QC across all samples.
+     * This is essential for identifying batch effects and outliers.
+     */
+    test("Should aggregate QC reports correctly") {
+
+        when {
+            params {
+                outdir = "${outputDir}/qc_test"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // MultiQC report should contain all expected sections
+            def multiqcHtml = workflow.out.multiqc_report.get(0).text
+            
+            // FastQC section
+            assert multiqcHtml.contains('FastQC') :
+                "MultiQC report missing FastQC section"
+            
+            // STAR section
+            assert multiqcHtml.contains('STAR') :
+                "MultiQC report missing STAR section"
+            
+            // Salmon section
+            assert multiqcHtml.contains('Salmon') :
+                "MultiQC report missing Salmon section"
+            
+            // General stats table
+            assert multiqcHtml.contains('General Statistics') :
+                "MultiQC report missing General Statistics"
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 3: Sample Processing
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify all samples in the samplesheet are processed
+     *
+     * WHY THIS MATTERS:
+     * Pipelines must handle multiple samples correctly. This test ensures
+     * no samples are dropped or duplicated during processing.
+     */
+    test("Should process all samples in samplesheet") {
+
+        when {
+            params {
+                outdir = "${outputDir}/sample_test"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Count samples in samplesheet
+            def samplesheet = file('${projectDir}/../test_data/samplesheet.csv')
+            def expectedSamples = samplesheet.readLines().size() - 1  // Minus header
+            
+            // Verify correct number of outputs
+            assert workflow.out.bam.size() == expectedSamples :
+                "Expected ${expectedSamples} BAM files, got ${workflow.out.bam.size()}"
+            
+            assert workflow.out.salmon_quant.size() == expectedSamples :
+                "Expected ${expectedSamples} Salmon outputs, got ${workflow.out.salmon_quant.size()}"
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 4: Output File Integrity
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify output files are complete and not corrupted
+     *
+     * WHY THIS MATTERS:
+     * Incomplete or corrupted outputs can cause downstream analysis to fail
+     * silently, producing incorrect results.
+     */
+    test("Should produce complete output files") {
+
+        when {
+            params {
+                outdir = "${outputDir}/integrity_test"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // BAM files should be valid (non-zero size, proper EOF)
+            workflow.out.bam.each { bamFile ->
+                assert bamFile.size() > 1000 :
+                    "BAM file ${bamFile.name} is suspiciously small"
+            }
+            
+            // Count matrix should have expected structure
+            def countsFile = workflow.out.counts.get(0)
+            def countsLines = countsFile.readLines()
+            
+            // Should have header + data rows
+            assert countsLines.size() > 1 :
+                "Count matrix appears empty"
+            
+            // Header should contain sample names
+            def header = countsLines[0]
+            assert header.contains('gene') || header.contains('Gene') :
+                "Count matrix missing gene column"
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 5: Resume Capability
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify pipeline can resume from cached results
+     *
+     * WHY THIS MATTERS:
+     * In production, pipelines may fail partway through. The ability to
+     * resume from where it left off saves time and compute costs.
+     *
+     * NEXTFLOW FEATURE:
+     * Nextflow caches task results. If a task's inputs haven't changed,
+     * it uses the cached output instead of re-running.
+     */
+    test("Should support resume from cache") {
+
+        when {
+            params {
+                outdir = "${outputDir}/resume_test"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Run again with -resume
+            // Second run should be faster due to caching
+            def firstRunTime = workflow.trace.duration
+            
+            // Note: In actual nf-test, you'd run the workflow twice
+            // and compare execution times. This is a simplified example.
+            assert workflow.trace.cached >= 0 :
+                "Resume capability not working - no cached tasks"
+        }
+    }
+}

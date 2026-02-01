@@ -1,0 +1,303 @@
+/*
+ * =============================================================================
+ * STAR Alignment Process Unit Test
+ * =============================================================================
+ *
+ * PURPOSE:
+ * This test validates the STAR alignment process. STAR is the most critical
+ * step in RNA-seq analysis - it maps reads to the reference genome.
+ *
+ * WHAT IS STAR?
+ * STAR (Spliced Transcripts Alignment to a Reference) is an ultrafast
+ * RNA-seq aligner. Key features:
+ * - Handles spliced alignments (reads spanning exon-exon junctions)
+ * - Very fast (uses suffix arrays and seed-based approach)
+ * - High accuracy for RNA-seq data
+ * - Outputs BAM files for downstream analysis
+ *
+ * WHY STAR FOR RNA-SEQ?
+ * Unlike DNA aligners (BWA, Bowtie2), STAR understands that RNA reads
+ * can span introns. A single read might map to two exons separated by
+ * thousands of bases in the genome.
+ *
+ * BIOLOGY CONCEPT - SPLICING:
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ DNA:     [Exon1]----intron----[Exon2]----intron----[Exon3]     │
+ * │                                                                 │
+ * │ mRNA:    [Exon1][Exon2][Exon3]  (introns removed)              │
+ * │                                                                 │
+ * │ Read:         ████████████████                                  │
+ * │               (spans Exon1-Exon2 junction)                      │
+ * └─────────────────────────────────────────────────────────────────┘
+ *
+ * INTERVIEW TIP:
+ * Be prepared to explain why you'd use STAR for RNA-seq but BWA for DNA-seq.
+ *
+ * =============================================================================
+ */
+
+nextflow_process {
+
+    name "Test STAR Alignment Process"
+    script "../workflows/main.nf"
+    process "STAR_ALIGN"
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 1: Basic Alignment
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify STAR produces valid BAM output from FASTQ input
+     */
+    test("Should align reads to reference genome") {
+
+        when {
+            process {
+                """
+                // Input tuple: [sample_id, reads, genome_index]
+                input[0] = Channel.of(
+                    tuple(
+                        'alignment_test',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ],
+                        file('${projectDir}/../test_data/reference/star_index/')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // BAM file should be produced
+            with(process.out.bam) {
+                assert size() == 1
+                assert get(0).exists()
+                assert get(0).name.endsWith('.bam')
+            }
+            
+            // BAM index should be produced
+            with(process.out.bai) {
+                assert size() == 1
+                assert get(0).exists()
+            }
+            
+            // Alignment log should be produced
+            with(process.out.log) {
+                assert size() == 1
+                assert get(0).exists()
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 2: Alignment Statistics
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify alignment produces reasonable mapping rates
+     *
+     * WHY THIS MATTERS:
+     * Low mapping rates indicate problems with:
+     * - Sample contamination
+     * - Wrong reference genome
+     * - Poor quality reads
+     * - Library preparation issues
+     *
+     * TYPICAL EXPECTATIONS:
+     * - Good RNA-seq: >80% uniquely mapped
+     * - Acceptable: >70% uniquely mapped
+     * - Concerning: <60% uniquely mapped
+     */
+    test("Should achieve acceptable mapping rate") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'mapping_rate_test',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ],
+                        file('${projectDir}/../test_data/reference/star_index/')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // Parse the STAR log to extract mapping statistics
+            def logContent = process.out.log.get(0).text
+            
+            // Extract uniquely mapped percentage
+            def uniquelyMappedMatch = logContent =~ /Uniquely mapped reads %\s*\|\s*([\d.]+)%/
+            if (uniquelyMappedMatch) {
+                def uniquelyMappedPct = uniquelyMappedMatch[0][1] as Double
+                
+                // Assert minimum acceptable mapping rate
+                assert uniquelyMappedPct >= 70.0 : 
+                    "Uniquely mapped rate ${uniquelyMappedPct}% is below threshold (70%)"
+            }
+            
+            // Extract multi-mapped percentage (should be reasonable)
+            def multiMappedMatch = logContent =~ /% of reads mapped to multiple loci\s*\|\s*([\d.]+)%/
+            if (multiMappedMatch) {
+                def multiMappedPct = multiMappedMatch[0][1] as Double
+                
+                // High multi-mapping can indicate repetitive sequences or contamination
+                assert multiMappedPct <= 20.0 :
+                    "Multi-mapped rate ${multiMappedPct}% is unusually high (>20%)"
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 3: BAM File Validity
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify the BAM file is properly formatted and sorted
+     *
+     * WHY THIS MATTERS:
+     * Downstream tools (featureCounts, Salmon, etc.) expect properly
+     * formatted, sorted, and indexed BAM files.
+     */
+    test("Should produce valid sorted BAM file") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'bam_validity_test',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ],
+                        file('${projectDir}/../test_data/reference/star_index/')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            def bamFile = process.out.bam.get(0)
+            
+            // Verify BAM header contains required fields
+            // This would typically use samtools in a real test
+            assert bamFile.exists()
+            assert bamFile.size() > 0
+            
+            // Verify BAM is coordinate-sorted (required for many tools)
+            // The output name should indicate sorting
+            assert bamFile.name.contains('Aligned.sortedByCoord') ||
+                   bamFile.name.contains('sorted')
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 4: Splice Junction Detection
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify STAR detects splice junctions correctly
+     *
+     * WHY THIS MATTERS:
+     * Splice junction detection is the key feature that distinguishes
+     * RNA-seq aligners from DNA aligners. This is critical for:
+     * - Accurate gene expression quantification
+     * - Novel transcript discovery
+     * - Alternative splicing analysis
+     */
+    test("Should detect splice junctions") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'splice_junction_test',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ],
+                        file('${projectDir}/../test_data/reference/star_index/')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // STAR produces a splice junction file (SJ.out.tab)
+            with(process.out.sj) {
+                assert size() == 1
+                assert get(0).exists()
+                
+                // File should contain detected junctions
+                def sjContent = get(0).text
+                def junctionCount = sjContent.readLines().size()
+                
+                // Should detect at least some junctions in test data
+                assert junctionCount > 0 :
+                    "No splice junctions detected - check test data or parameters"
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 5: Two-Pass Mode
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify two-pass alignment mode works correctly
+     *
+     * WHAT IS TWO-PASS MODE?
+     * Pass 1: Align reads and discover novel splice junctions
+     * Pass 2: Re-align using discovered junctions for better accuracy
+     *
+     * WHY USE IT:
+     * - Improves detection of novel splice junctions
+     * - Better alignment around splice sites
+     * - Recommended for most RNA-seq analyses
+     */
+    test("Should support two-pass alignment mode") {
+
+        when {
+            params {
+                star_two_pass = true
+            }
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'two_pass_test',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ],
+                        file('${projectDir}/../test_data/reference/star_index/')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // Verify two-pass mode was used (check log)
+            def logContent = process.out.log.get(0).text
+            assert logContent.contains('twopassMode') ||
+                   logContent.contains('2-pass')
+        }
+    }
+}

@@ -1,0 +1,533 @@
+# =============================================================================
+# RNA-Seq Pipeline CI/CD Workflow
+# =============================================================================
+#
+# PURPOSE:
+# This workflow implements a complete CI/CD pipeline for a production-grade
+# bioinformatics platform. It demonstrates enterprise-level DevOps practices
+# that are expected in senior bioinformatics engineering roles.
+#
+# WHAT THIS WORKFLOW DOES:
+# 1. Lints and validates Nextflow code
+# 2. Builds and pushes Docker images to Amazon ECR
+# 3. Runs automated tests using nf-test
+# 4. Deploys to Kubernetes (EKS) on successful tests
+#
+# WHY THIS MATTERS FOR INTERVIEWS:
+# - Shows you understand CI/CD best practices
+# - Demonstrates security awareness (secrets management, OIDC)
+# - Proves you can build production-ready automation
+# - Illustrates your ability to integrate multiple tools
+#
+# =============================================================================
+
+name: RNA-Seq Pipeline CI/CD
+
+# -----------------------------------------------------------------------------
+# TRIGGER CONDITIONS
+# -----------------------------------------------------------------------------
+# When should this workflow run?
+#
+# BEST PRACTICE: Run on pull requests for validation, on push to main for deployment
+# This prevents broken code from reaching production while allowing fast iteration
+# -----------------------------------------------------------------------------
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'workflows/**'
+      - 'containers/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'workflows/**'
+      - 'containers/**'
+      - 'tests/**'
+      - '.github/workflows/**'
+  # Allow manual triggering for debugging
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+# -----------------------------------------------------------------------------
+# ENVIRONMENT VARIABLES
+# -----------------------------------------------------------------------------
+# Centralized configuration for the entire workflow
+# 
+# WHY: Avoids hardcoding values throughout the workflow, making it easier
+# to maintain and reducing the risk of inconsistencies
+# -----------------------------------------------------------------------------
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY_PREFIX: rnaseq-pipeline
+  NEXTFLOW_VERSION: '23.10.0'
+  NF_TEST_VERSION: '0.8.4'
+
+# -----------------------------------------------------------------------------
+# PERMISSIONS
+# -----------------------------------------------------------------------------
+# Principle of Least Privilege: Only request the permissions we need
+#
+# WHY: Security best practice. If this workflow is compromised, the attacker
+# has limited access. This is especially important in regulated environments
+# like clinical genomics.
+# -----------------------------------------------------------------------------
+permissions:
+  contents: read
+  packages: write
+  id-token: write  # Required for OIDC authentication with AWS
+
+# -----------------------------------------------------------------------------
+# JOBS
+# -----------------------------------------------------------------------------
+jobs:
+  # ===========================================================================
+  # JOB 1: LINT AND VALIDATE
+  # ===========================================================================
+  # Purpose: Catch syntax errors and style issues before running expensive tests
+  #
+  # WHY THIS JOB EXISTS:
+  # - Fast feedback (runs in ~1 minute)
+  # - Catches common mistakes early
+  # - Enforces code quality standards
+  # ===========================================================================
+  lint:
+    name: Lint & Validate Nextflow
+    runs-on: ubuntu-latest
+    
+    steps:
+      # -----------------------------------------------------------------------
+      # Step 1: Checkout code
+      # -----------------------------------------------------------------------
+      # WHAT: Downloads your repository code to the runner
+      # WHY: GitHub Actions runners start with an empty filesystem
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      # -----------------------------------------------------------------------
+      # Step 2: Install Nextflow
+      # -----------------------------------------------------------------------
+      # WHAT: Installs the Nextflow workflow engine
+      # WHY: We need Nextflow to validate the pipeline syntax
+      #
+      # INTERVIEW TIP: Know why we pin to a specific version (reproducibility)
+      # -----------------------------------------------------------------------
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v1
+        with:
+          version: ${{ env.NEXTFLOW_VERSION }}
+
+      # -----------------------------------------------------------------------
+      # Step 3: Validate Nextflow syntax
+      # -----------------------------------------------------------------------
+      # WHAT: Checks if the pipeline code is syntactically correct
+      # WHY: Catches errors before we spend time building containers
+      #
+      # The `-preview.dsl2` flag enables DSL2 syntax checking
+      # -----------------------------------------------------------------------
+      - name: Validate Nextflow syntax
+        run: |
+          cd workflows
+          nextflow run main.nf -preview
+        continue-on-error: false
+
+      # -----------------------------------------------------------------------
+      # Step 4: Check Nextflow configuration
+      # -----------------------------------------------------------------------
+      # WHAT: Validates the nextflow.config file
+      # WHY: Configuration errors are a common source of pipeline failures
+      # -----------------------------------------------------------------------
+      - name: Validate Nextflow config
+        run: |
+          cd workflows
+          nextflow config -show-profiles
+
+      # -----------------------------------------------------------------------
+      # Step 5: Lint Dockerfiles
+      # -----------------------------------------------------------------------
+      # WHAT: Uses Hadolint to check Dockerfile best practices
+      # WHY: Catches security issues and inefficiencies in container builds
+      #
+      # INTERVIEW TIP: Hadolint is the industry-standard Dockerfile linter
+      # -----------------------------------------------------------------------
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: containers/*/Dockerfile
+          recursive: true
+          failure-threshold: warning
+
+  # ===========================================================================
+  # JOB 2: BUILD AND PUSH DOCKER IMAGES
+  # ===========================================================================
+  # Purpose: Build container images and push to Amazon ECR
+  #
+  # WHY THIS JOB EXISTS:
+  # - Containers ensure reproducibility across environments
+  # - ECR provides secure, private container storage
+  # - Building once and reusing is more efficient than building on each run
+  #
+  # MATRIX STRATEGY:
+  # We use a matrix to build multiple containers in parallel. This is a
+  # key optimization technique for CI/CD pipelines.
+  # ===========================================================================
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: lint  # Only run if linting passes
+    
+    # -------------------------------------------------------------------------
+    # Matrix Strategy
+    # -------------------------------------------------------------------------
+    # WHAT: Runs this job multiple times with different configurations
+    # WHY: Builds all containers in parallel, reducing total build time
+    #
+    # INTERVIEW TIP: Explain how matrix builds improve CI/CD efficiency
+    # -------------------------------------------------------------------------
+    strategy:
+      fail-fast: false  # Continue building other images if one fails
+      matrix:
+        container:
+          - name: fastqc
+            context: containers/fastqc
+          - name: star
+            context: containers/star
+          - name: salmon
+            context: containers/salmon
+          - name: multiqc
+            context: containers/multiqc
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Configure AWS Credentials using OIDC
+      # -----------------------------------------------------------------------
+      # WHAT: Authenticates with AWS without storing long-lived credentials
+      # WHY: OIDC is more secure than storing AWS access keys as secrets
+      #
+      # HOW IT WORKS:
+      # 1. GitHub generates a short-lived token
+      # 2. AWS verifies the token and issues temporary credentials
+      # 3. Credentials expire automatically after the job completes
+      #
+      # INTERVIEW TIP: This is a best practice for AWS authentication in CI/CD
+      # -----------------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # Login to Amazon ECR
+      # -----------------------------------------------------------------------
+      # WHAT: Authenticates Docker with Amazon ECR
+      # WHY: Required to push images to our private container registry
+      # -----------------------------------------------------------------------
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # -----------------------------------------------------------------------
+      # Set up Docker Buildx
+      # -----------------------------------------------------------------------
+      # WHAT: Enables advanced Docker build features
+      # WHY: Required for multi-platform builds and build caching
+      #
+      # INTERVIEW TIP: Buildx enables building for multiple architectures
+      # (e.g., amd64 and arm64) from a single workflow
+      # -----------------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # -----------------------------------------------------------------------
+      # Extract metadata for Docker
+      # -----------------------------------------------------------------------
+      # WHAT: Generates tags and labels for the Docker image
+      # WHY: Consistent tagging strategy is crucial for image management
+      #
+      # TAGGING STRATEGY:
+      # - latest: For the most recent build on main
+      # - sha-<commit>: For traceability to specific commits
+      # - pr-<number>: For pull request builds
+      # -----------------------------------------------------------------------
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_PREFIX }}-${{ matrix.container.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      # -----------------------------------------------------------------------
+      # Build and push Docker image
+      # -----------------------------------------------------------------------
+      # WHAT: Builds the container image and pushes to ECR
+      # WHY: This is the core purpose of this job
+      #
+      # KEY FEATURES:
+      # - cache-from/cache-to: Speeds up builds by reusing layers
+      # - provenance: Adds build attestation for security
+      # -----------------------------------------------------------------------
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.container.context }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+
+  # ===========================================================================
+  # JOB 3: RUN AUTOMATED TESTS
+  # ===========================================================================
+  # Purpose: Validate the pipeline produces correct results
+  #
+  # WHY THIS JOB EXISTS:
+  # - Ensures code changes don't break existing functionality
+  # - Validates scientific accuracy of the pipeline
+  # - Provides confidence for deployment
+  #
+  # INTERVIEW TIP: Testing is often overlooked in bioinformatics. Showing
+  # you understand automated testing sets you apart from other candidates.
+  # ===========================================================================
+  test:
+    name: Run Pipeline Tests
+    runs-on: ubuntu-latest
+    needs: build  # Only run after containers are built
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@v1
+        with:
+          version: ${{ env.NEXTFLOW_VERSION }}
+
+      # -----------------------------------------------------------------------
+      # Install nf-test
+      # -----------------------------------------------------------------------
+      # WHAT: Installs the nf-test framework for Nextflow pipeline testing
+      # WHY: nf-test is the standard testing framework for Nextflow pipelines
+      #
+      # INTERVIEW TIP: Know what nf-test is and why it's important
+      # -----------------------------------------------------------------------
+      - name: Install nf-test
+        run: |
+          wget -qO- https://github.com/askimed/nf-test/releases/download/v${{ env.NF_TEST_VERSION }}/nf-test-${{ env.NF_TEST_VERSION }}.tar.gz | tar -xz
+          sudo mv nf-test /usr/local/bin/
+          nf-test version
+
+      # -----------------------------------------------------------------------
+      # Download test data
+      # -----------------------------------------------------------------------
+      # WHAT: Downloads a small test dataset for pipeline validation
+      # WHY: We need real data to test the pipeline, but full datasets are too large
+      #
+      # BEST PRACTICE: Use small, representative test datasets in CI/CD
+      # -----------------------------------------------------------------------
+      - name: Download test data
+        run: |
+          mkdir -p test_data
+          # Download minimal test dataset (subset of public data)
+          ./scripts/download-test-data.sh
+
+      # -----------------------------------------------------------------------
+      # Run nf-test suite
+      # -----------------------------------------------------------------------
+      # WHAT: Executes all pipeline tests
+      # WHY: Validates that the pipeline works correctly
+      #
+      # TEST TYPES:
+      # - Unit tests: Test individual processes
+      # - Integration tests: Test process interactions
+      # - E2E tests: Test the complete pipeline
+      # -----------------------------------------------------------------------
+      - name: Run nf-test suite
+        run: |
+          cd tests
+          nf-test test --profile docker --tap test-results.tap
+        env:
+          NFT_DIFF: 'true'
+
+      # -----------------------------------------------------------------------
+      # Upload test results
+      # -----------------------------------------------------------------------
+      # WHAT: Saves test results as artifacts
+      # WHY: Allows reviewing test results after the workflow completes
+      # -----------------------------------------------------------------------
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: tests/test-results.tap
+
+      # -----------------------------------------------------------------------
+      # Publish test results
+      # -----------------------------------------------------------------------
+      # WHAT: Displays test results in the GitHub UI
+      # WHY: Makes it easy to see which tests passed/failed
+      # -----------------------------------------------------------------------
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: tests/test-results.tap
+
+  # ===========================================================================
+  # JOB 4: DEPLOY TO KUBERNETES
+  # ===========================================================================
+  # Purpose: Deploy the pipeline to the EKS cluster
+  #
+  # WHY THIS JOB EXISTS:
+  # - Automates deployment to production
+  # - Ensures consistent deployment process
+  # - Enables continuous delivery
+  #
+  # CONDITIONAL EXECUTION:
+  # This job only runs on pushes to main (not on PRs) to prevent
+  # accidental deployments from feature branches.
+  # ===========================================================================
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: test  # Only deploy if tests pass
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    # -------------------------------------------------------------------------
+    # Environment
+    # -------------------------------------------------------------------------
+    # WHAT: Specifies the deployment environment
+    # WHY: Enables environment-specific configurations and approvals
+    #
+    # BEST PRACTICE: Use GitHub Environments for deployment protection rules
+    # -------------------------------------------------------------------------
+    environment:
+      name: production
+      url: https://rnaseq-pipeline.example.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # Update kubeconfig
+      # -----------------------------------------------------------------------
+      # WHAT: Configures kubectl to communicate with our EKS cluster
+      # WHY: Required to deploy Kubernetes resources
+      # -----------------------------------------------------------------------
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }}
+
+      # -----------------------------------------------------------------------
+      # Deploy Kubernetes resources
+      # -----------------------------------------------------------------------
+      # WHAT: Applies Kubernetes manifests to the cluster
+      # WHY: Creates/updates the pipeline infrastructure
+      #
+      # ORDER MATTERS:
+      # 1. Namespace first (other resources depend on it)
+      # 2. RBAC (permissions for the pipeline)
+      # 3. Storage (PVCs for data)
+      # 4. Resource quotas (cost control)
+      # -----------------------------------------------------------------------
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/rbac.yaml
+          kubectl apply -f k8s/storage.yaml
+          kubectl apply -f k8s/resource-quota.yaml
+
+      # -----------------------------------------------------------------------
+      # Verify deployment
+      # -----------------------------------------------------------------------
+      # WHAT: Checks that the deployment was successful
+      # WHY: Catches deployment failures early
+      # -----------------------------------------------------------------------
+      - name: Verify deployment
+        run: |
+          kubectl get all -n rnaseq-pipeline
+          kubectl get pvc -n rnaseq-pipeline
+
+  # ===========================================================================
+  # JOB 5: SECURITY SCANNING
+  # ===========================================================================
+  # Purpose: Scan for security vulnerabilities
+  #
+  # WHY THIS JOB EXISTS:
+  # - Security is critical in clinical/pharma environments
+  # - Catches vulnerabilities before they reach production
+  # - Demonstrates security awareness to potential employers
+  #
+  # INTERVIEW TIP: Security scanning is increasingly important in regulated
+  # industries. Showing you understand this sets you apart.
+  # ===========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Run Trivy vulnerability scanner
+      # -----------------------------------------------------------------------
+      # WHAT: Scans for vulnerabilities in code and dependencies
+      # WHY: Identifies security issues before deployment
+      #
+      # TRIVY SCANS:
+      # - Container images for known CVEs
+      # - IaC files for misconfigurations
+      # - Dependencies for vulnerable packages
+      # -----------------------------------------------------------------------
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      # -----------------------------------------------------------------------
+      # Upload security results to GitHub Security tab
+      # -----------------------------------------------------------------------
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'

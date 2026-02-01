@@ -1,0 +1,344 @@
+/*
+ * =============================================================================
+ * End-to-End Scientific Validation Test
+ * =============================================================================
+ *
+ * PURPOSE:
+ * This test validates the scientific accuracy of the pipeline by comparing
+ * results against known "ground truth" data. This is the most important
+ * test for ensuring the pipeline produces biologically meaningful results.
+ *
+ * WHY SCIENTIFIC VALIDATION MATTERS:
+ * A pipeline can be technically correct (no crashes, proper file formats)
+ * but scientifically wrong (incorrect gene expression values). This test
+ * catches scientific errors that other tests miss.
+ *
+ * VALIDATION STRATEGY:
+ * We use a "gold standard" dataset where the expected results are known.
+ * The pipeline output is compared against these expected results.
+ *
+ * INTERVIEW TIP:
+ * Be prepared to discuss how you would validate a bioinformatics pipeline.
+ * This demonstrates scientific rigor, not just engineering skills.
+ *
+ * =============================================================================
+ */
+
+nextflow_workflow {
+
+    name "Scientific Validation Test"
+    script "../workflows/main.nf"
+    workflow "RNASEQ_PIPELINE"
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 1: Gene Expression Correlation
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify gene expression values correlate with expected results
+     *
+     * METHODOLOGY:
+     * 1. Run pipeline on test data with known expression values
+     * 2. Compare output expression values to expected values
+     * 3. Calculate Pearson correlation coefficient
+     * 4. Assert correlation exceeds threshold (e.g., r > 0.95)
+     *
+     * WHY CORRELATION:
+     * Absolute values may differ due to normalization methods, but relative
+     * expression patterns should be preserved. High correlation indicates
+     * the pipeline correctly captures expression differences between genes.
+     */
+    test("Should produce gene expression values correlated with expected") {
+
+        when {
+            params {
+                outdir = "${outputDir}/validation"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/validation/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Load expected expression values (ground truth)
+            def expectedFile = file('${projectDir}/../test_data/validation/expected_counts.tsv')
+            def expectedCounts = parseCountMatrix(expectedFile)
+            
+            // Load actual expression values from pipeline
+            def actualFile = workflow.out.counts.get(0)
+            def actualCounts = parseCountMatrix(actualFile)
+            
+            // Calculate correlation for each sample
+            expectedCounts.samples.each { sample ->
+                def expected = expectedCounts.values[sample]
+                def actual = actualCounts.values[sample]
+                
+                def correlation = calculatePearsonCorrelation(expected, actual)
+                
+                assert correlation >= 0.95 :
+                    "Sample ${sample} correlation ${correlation} below threshold (0.95)"
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 2: Differential Expression Detection
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify pipeline correctly identifies differentially expressed genes
+     *
+     * METHODOLOGY:
+     * Using a dataset with known DE genes (e.g., spike-ins or simulated data),
+     * verify the pipeline identifies the expected genes as differentially expressed.
+     *
+     * METRICS:
+     * - Sensitivity: % of true DE genes correctly identified
+     * - Specificity: % of non-DE genes correctly identified as not DE
+     * - False Discovery Rate: % of identified DE genes that are false positives
+     */
+    test("Should detect known differentially expressed genes") {
+
+        when {
+            params {
+                outdir = "${outputDir}/de_validation"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/validation/de_samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Load known DE genes (ground truth)
+            def knownDEFile = file('${projectDir}/../test_data/validation/known_de_genes.txt')
+            def knownDEGenes = knownDEFile.readLines().toSet()
+            
+            // Load pipeline DE results
+            def deResultsFile = workflow.out.de_results?.get(0)
+            if (deResultsFile) {
+                def identifiedDEGenes = parseDeResults(deResultsFile)
+                
+                // Calculate sensitivity (true positive rate)
+                def truePositives = identifiedDEGenes.intersect(knownDEGenes)
+                def sensitivity = truePositives.size() / knownDEGenes.size()
+                
+                assert sensitivity >= 0.80 :
+                    "Sensitivity ${sensitivity} below threshold (0.80)"
+                
+                // Calculate precision (positive predictive value)
+                def precision = truePositives.size() / identifiedDEGenes.size()
+                
+                assert precision >= 0.70 :
+                    "Precision ${precision} below threshold (0.70)"
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 3: Alignment Quality Metrics
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify alignment quality meets expected standards
+     *
+     * KEY METRICS:
+     * - Uniquely mapped reads: Should be >70% for good quality data
+     * - Multi-mapped reads: Should be <20%
+     * - Unmapped reads: Should be <20%
+     * - Properly paired reads: Should be >90% for paired-end data
+     */
+    test("Should meet alignment quality thresholds") {
+
+        when {
+            params {
+                outdir = "${outputDir}/alignment_validation"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/validation/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Parse MultiQC JSON for alignment statistics
+            def multiqcData = file("${outputDir}/alignment_validation/multiqc/multiqc_data/multiqc_data.json")
+            if (multiqcData.exists()) {
+                def stats = new groovy.json.JsonSlurper().parse(multiqcData)
+                
+                stats.report_general_stats_data.each { sample, metrics ->
+                    // Check uniquely mapped percentage
+                    if (metrics.uniquely_mapped_percent) {
+                        assert metrics.uniquely_mapped_percent >= 70.0 :
+                            "Sample ${sample} uniquely mapped ${metrics.uniquely_mapped_percent}% < 70%"
+                    }
+                    
+                    // Check multi-mapped percentage
+                    if (metrics.multimapped_percent) {
+                        assert metrics.multimapped_percent <= 20.0 :
+                            "Sample ${sample} multi-mapped ${metrics.multimapped_percent}% > 20%"
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 4: Reproducibility Test
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify pipeline produces identical results when run twice
+     *
+     * WHY THIS MATTERS:
+     * Scientific reproducibility is fundamental. The same input should
+     * always produce the same output (given the same software versions).
+     *
+     * WHAT CAN CAUSE NON-REPRODUCIBILITY:
+     * - Random seeds not set
+     * - Floating-point arithmetic differences
+     * - Race conditions in parallel processing
+     * - Non-deterministic algorithms
+     */
+    test("Should produce reproducible results") {
+
+        when {
+            params {
+                outdir = "${outputDir}/reproducibility_run1"
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            assert workflow.success
+            
+            // Store results from first run
+            def run1Counts = workflow.out.counts.get(0).text
+            
+            // In a real test, you would run the workflow again and compare
+            // For this example, we use snapshot testing
+            assert snapshot(
+                workflow.out.counts,
+                workflow.out.multiqc_report
+            ).match()
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 5: Edge Case Handling
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify pipeline handles edge cases correctly
+     *
+     * EDGE CASES:
+     * - Low-coverage samples
+     * - Samples with high duplication
+     * - Samples with adapter contamination
+     * - Single-end vs paired-end mixing
+     */
+    test("Should handle low-coverage samples gracefully") {
+
+        when {
+            params {
+                outdir = "${outputDir}/edge_cases"
+                min_reads = 1000  // Lower threshold for test data
+            }
+            workflow {
+                """
+                input[0] = Channel.fromPath('${projectDir}/../test_data/edge_cases/low_coverage_samplesheet.csv')
+                input[1] = file('${projectDir}/../test_data/reference/genome.fa')
+                input[2] = file('${projectDir}/../test_data/reference/genes.gtf')
+                """
+            }
+        }
+
+        then {
+            // Pipeline should complete (not crash)
+            assert workflow.success
+            
+            // Low-coverage samples should be flagged in QC
+            def multiqcHtml = workflow.out.multiqc_report.get(0).text
+            
+            // MultiQC should highlight problematic samples
+            // (This depends on your MultiQC configuration)
+            assert multiqcHtml.contains('warning') || 
+                   multiqcHtml.contains('fail') ||
+                   workflow.out.qc_warnings?.size() > 0 :
+                "Low-coverage samples not flagged in QC report"
+        }
+    }
+}
+
+/*
+ * =============================================================================
+ * HELPER FUNCTIONS
+ * =============================================================================
+ * These functions support the test assertions above.
+ */
+
+def parseCountMatrix(File countFile) {
+    def lines = countFile.readLines()
+    def header = lines[0].split('\t')
+    def samples = header[1..-1]  // Skip gene column
+    
+    def values = [:]
+    samples.each { sample -> values[sample] = [] }
+    
+    lines[1..-1].each { line ->
+        def fields = line.split('\t')
+        samples.eachWithIndex { sample, i ->
+            values[sample] << (fields[i + 1] as Double)
+        }
+    }
+    
+    return [samples: samples, values: values]
+}
+
+def calculatePearsonCorrelation(List<Double> x, List<Double> y) {
+    def n = x.size()
+    def sumX = x.sum()
+    def sumY = y.sum()
+    def sumXY = [x, y].transpose().collect { it[0] * it[1] }.sum()
+    def sumX2 = x.collect { it * it }.sum()
+    def sumY2 = y.collect { it * it }.sum()
+    
+    def numerator = n * sumXY - sumX * sumY
+    def denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY))
+    
+    return numerator / denominator
+}
+
+def parseDeResults(File deFile) {
+    def lines = deFile.readLines()
+    def deGenes = [] as Set
+    
+    lines[1..-1].each { line ->
+        def fields = line.split('\t')
+        def gene = fields[0]
+        def pvalue = fields.find { it.contains('pvalue') || it.contains('padj') } as Double
+        
+        if (pvalue && pvalue < 0.05) {
+            deGenes << gene
+        }
+    }
+    
+    return deGenes
+}

@@ -1,0 +1,265 @@
+/*
+ * =============================================================================
+ * FASTQC Process Unit Test
+ * =============================================================================
+ *
+ * PURPOSE:
+ * This test validates the FASTQC process in isolation. Unit tests are the
+ * foundation of a robust testing strategy - they're fast, focused, and help
+ * pinpoint exactly where problems occur.
+ *
+ * WHAT IS FASTQC?
+ * FastQC is a quality control tool for high-throughput sequencing data.
+ * It analyzes FASTQ files and produces reports showing:
+ * - Per-base sequence quality
+ * - Per-sequence quality scores
+ * - Sequence duplication levels
+ * - Overrepresented sequences
+ * - Adapter content
+ *
+ * WHY TEST FASTQC?
+ * 1. It's the first step in most NGS pipelines
+ * 2. If QC fails, downstream analysis is unreliable
+ * 3. Output format must be consistent for MultiQC aggregation
+ *
+ * INTERVIEW TIP:
+ * Be prepared to explain what FastQC metrics mean and what constitutes
+ * "good" vs "bad" quality data.
+ *
+ * =============================================================================
+ */
+
+nextflow_process {
+
+    /*
+     * -------------------------------------------------------------------------
+     * Process Under Test
+     * -------------------------------------------------------------------------
+     * WHAT: Identifies which Nextflow process we're testing
+     * WHERE: Path to the main workflow file containing the process
+     */
+    name "Test FASTQC Process"
+    script "../workflows/main.nf"
+    process "FASTQC"
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 1: Basic Functionality
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify FASTQC runs successfully with valid input
+     *
+     * TEST STRATEGY:
+     * 1. Provide a valid FASTQ file as input
+     * 2. Run the process
+     * 3. Verify it completes successfully
+     * 4. Check output files exist and have expected structure
+     */
+    test("Should run FASTQC on single-end reads") {
+
+        when {
+            /*
+             * INPUT SETUP
+             * -----------
+             * We create a channel with test data. In production, this would
+             * be real sequencing data. For testing, we use a small subset.
+             *
+             * TUPLE STRUCTURE: [sample_id, fastq_file]
+             * This matches the expected input format of the FASTQC process.
+             */
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'test_sample',
+                        file('${projectDir}/../test_data/reads/test_R1.fastq.gz')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            /*
+             * ASSERTIONS
+             * ----------
+             * These checks verify the process behaved correctly.
+             *
+             * assert process.success: Process exited with code 0
+             * assert process.out: Output channel contains expected data
+             */
+            
+            // Process should complete successfully
+            assert process.success
+            
+            // Output channel should contain results
+            assert process.out.html
+            assert process.out.zip
+            
+            // HTML report should exist and be non-empty
+            with(process.out.html) {
+                assert size() == 1
+                assert get(0).exists()
+                assert get(0).size() > 0
+            }
+            
+            // ZIP archive should exist (contains detailed results)
+            with(process.out.zip) {
+                assert size() == 1
+                assert get(0).exists()
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 2: Paired-End Reads
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify FASTQC handles paired-end data correctly
+     *
+     * WHY THIS MATTERS:
+     * Most modern sequencing is paired-end. The pipeline must handle both
+     * R1 and R2 files correctly.
+     */
+    test("Should run FASTQC on paired-end reads") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'test_sample_pe',
+                        [
+                            file('${projectDir}/../test_data/reads/test_R1.fastq.gz'),
+                            file('${projectDir}/../test_data/reads/test_R2.fastq.gz')
+                        ]
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // Should produce reports for both R1 and R2
+            with(process.out.html) {
+                assert size() == 2
+            }
+            
+            with(process.out.zip) {
+                assert size() == 2
+            }
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 3: Output Content Validation
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify the content of FastQC output is correct
+     *
+     * WHY THIS MATTERS:
+     * It's not enough that files exist - they must contain valid data.
+     * This test uses snapshot testing to compare against known-good output.
+     */
+    test("Should produce valid FastQC report content") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'content_test',
+                        file('${projectDir}/../test_data/reads/test_R1.fastq.gz')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // Verify HTML contains expected sections
+            def htmlContent = process.out.html.get(0).text
+            assert htmlContent.contains('FastQC Report')
+            assert htmlContent.contains('Basic Statistics')
+            assert htmlContent.contains('Per base sequence quality')
+            
+            // Use snapshot testing for detailed comparison
+            // This compares output against a stored "golden" result
+            assert snapshot(process.out).match()
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 4: Error Handling
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify the process handles invalid input gracefully
+     *
+     * WHY THIS MATTERS:
+     * Production pipelines encounter bad data. The pipeline should fail
+     * clearly with helpful error messages, not silently produce garbage.
+     */
+    test("Should fail gracefully with invalid input") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'invalid_test',
+                        file('${projectDir}/../test_data/invalid/not_a_fastq.txt')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            // Process should fail (not succeed with garbage output)
+            assert process.failed
+            
+            // Error message should be informative
+            assert process.errorReport.contains('Error') || 
+                   process.errorReport.contains('Invalid')
+        }
+    }
+
+    /*
+     * -------------------------------------------------------------------------
+     * Test Case 5: Resource Usage
+     * -------------------------------------------------------------------------
+     * PURPOSE: Verify the process uses appropriate resources
+     *
+     * WHY THIS MATTERS:
+     * In production, resource usage affects cost and scheduling.
+     * Tests should verify the process doesn't exceed expected limits.
+     */
+    test("Should complete within resource limits") {
+
+        when {
+            process {
+                """
+                input[0] = Channel.of(
+                    tuple(
+                        'resource_test',
+                        file('${projectDir}/../test_data/reads/test_R1.fastq.gz')
+                    )
+                )
+                """
+            }
+        }
+
+        then {
+            assert process.success
+            
+            // Verify resource usage is within expected bounds
+            // These values should match your nextflow.config settings
+            assert process.trace.cpus <= 2
+            assert process.trace.memory.toGiga() <= 4
+            assert process.trace.duration.toMinutes() <= 10
+        }
+    }
+}
