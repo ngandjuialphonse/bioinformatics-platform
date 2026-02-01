@@ -28,14 +28,12 @@ nextflow.enable.dsl = 2
  * Users can override them: --reads "/path/to/data/*.fastq.gz"
  */
 
-// Input data parameters
-params.reads = "${projectDir}/../data/fastq/*_R{1,2}.fastq.gz"  // Paired-end FASTQ files
-params.genome = "${projectDir}/../data/reference/genome.fa"      // Reference genome (FASTA)
-params.gtf = "${projectDir}/../data/reference/genes.gtf"         // Gene annotations
-params.outdir = "${projectDir}/../data/results"                  // Output directory
-
-// Reference genome index (pre-built for speed)
-params.star_index = "${projectDir}/../data/reference/star_index"
+// Input data parameters (use -profile test or specify via CLI)
+params.reads = null                          // Paired-end FASTQ files (required)
+params.genome = null                         // Reference genome (FASTA) (required)
+params.gtf = null                            // Gene annotations (required)
+params.outdir = "${projectDir}/../results"   // Output directory
+params.star_index = null                     // Pre-built STAR index (optional)
 
 // Tool-specific parameters
 params.fastqc_threads = 2

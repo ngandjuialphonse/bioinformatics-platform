@@ -132,6 +132,8 @@ module "iam" {
   project_name      = var.project_name
   aws_account_id    = data.aws_caller_identity.current.account_id
   oidc_provider_arn = module.eks.oidc_provider_arn
+  aws_region        = var.aws_region
+  github_repo       = var.github_repo
 
   tags = {
     Project     = var.project_name

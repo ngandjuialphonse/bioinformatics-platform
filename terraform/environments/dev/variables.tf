@@ -34,3 +34,9 @@ variable "container_names" {
     "multiqc"
   ]
 }
+
+variable "github_repo" {
+  description = "The GitHub repository in the format owner/repo for OIDC authentication."
+  type        = string
+  default     = "ngandjuialphonse/bioinformatics-platform"
+}

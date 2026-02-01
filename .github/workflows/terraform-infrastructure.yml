@@ -103,6 +103,7 @@ jobs:
             })
       
       - name: Terraform Apply
+        id: apply
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve tfplan
       

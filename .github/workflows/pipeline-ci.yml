@@ -428,8 +428,8 @@ jobs:
     # BEST PRACTICE: Use GitHub Environments for deployment protection rules
     # -------------------------------------------------------------------------
     environment:
-      name: production
-      url: https://rnaseq-pipeline.example.com
+      name: dev
+      url: https://rnaseq-pipeline-dev.example.com
 
     steps:
       - name: Checkout repository
