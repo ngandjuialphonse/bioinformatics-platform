@@ -569,8 +569,16 @@ jobs:
       - name: Verify deployment
         if: steps.kubeconfig.outputs.cluster_exists == 'true'
         run: |
-          kubectl get all -n rnaseq-pipeline
-          kubectl get pvc -n rnaseq-pipeline
+          echo "📋 Deployed resources in bioinformatics namespace:"
+          kubectl get all -n bioinformatics
+          echo ""
+          echo "💾 Storage resources:"
+          kubectl get pvc -n bioinformatics
+          echo ""
+          echo "📊 Resource quotas:"
+          kubectl get resourcequota -n bioinformatics
+          echo ""
+          echo "✅ Deployment verification complete!"
 
       # -----------------------------------------------------------------------
       # Skip deployment notice
