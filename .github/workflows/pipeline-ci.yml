@@ -508,28 +508,25 @@ jobs:
           if aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }} 2>/dev/null; then
             echo "✅ Successfully configured kubectl for EKS cluster"
             
-            # Grant current IAM user/role access to the cluster
-            CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
-            echo "Granting cluster access to: $CALLER_ARN"
-            
-            # Apply aws-auth ConfigMap to allow GitHub Actions access
-            if kubectl apply -f k8s/aws-auth.yaml 2>/dev/null; then
-              echo "✅ Updated aws-auth ConfigMap"
-            else
-              echo "⚠️  Could not update aws-auth ConfigMap (may already be configured)"
-            fi
-            
             # Verify cluster access
             if kubectl cluster-info 2>/dev/null; then
               echo "cluster_exists=true" >> $GITHUB_OUTPUT
-              echo "✅ Cluster is accessible"
+              echo "✅ Cluster is accessible - deployment will proceed"
             else
               echo "cluster_exists=false" >> $GITHUB_OUTPUT
-              echo "❌ Cluster exists but not accessible (RBAC issue)"
+              echo "⚠️  Cluster exists but not accessible"
+              echo ""
+              echo "RBAC SETUP REQUIRED:"
+              echo "Run this command locally to grant GitHub Actions access:"
+              echo "  bash scripts/grant-github-actions-access.sh"
+              echo ""
+              echo "Or manually apply:"
+              echo "  kubectl apply -f k8s/aws-auth.yaml"
             fi
           else
             echo "cluster_exists=false" >> $GITHUB_OUTPUT
             echo "❌ EKS cluster not found"
+            echo "Run 'terraform apply' in terraform/environments/dev/ to create it"
           fi
 
       # -----------------------------------------------------------------------
