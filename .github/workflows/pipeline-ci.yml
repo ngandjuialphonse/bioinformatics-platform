@@ -246,7 +246,7 @@ jobs:
       # NOTE: Skip if AWS credentials are not configured
       # -----------------------------------------------------------------------
       - name: Login to Amazon ECR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.AWS_ROLE_ARN != ''
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
         continue-on-error: true
