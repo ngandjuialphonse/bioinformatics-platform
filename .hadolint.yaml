@@ -8,6 +8,13 @@ ignored:
   # versions update in Ubuntu repositories. We prioritize build reliability over
   # this security recommendation. Base image versions are still pinned (ubuntu:22.04).
   - DL3008
+  
+  # DL3002: Last USER should not be root
+  # Reason: Bioinformatics workflow engines (Nextflow, Cromwell) often require
+  # root access for dynamic file operations across mount points and proper
+  # permission handling in shared volumes. Using pre-built biocontainers that
+  # are designed for workflow engine compatibility.
+  - DL3002
 
 # Trusted Registries
 # Only allow pulling from these registries
