@@ -1,0 +1,18 @@
+# Hadolint Configuration
+# Documentation: https://github.com/hadolint/hadolint
+
+# Ignored Rules
+ignored:
+  # DL3008: Pin versions in apt-get install
+  # Reason: Exact version pinning causes frequent build failures when package
+  # versions update in Ubuntu repositories. We prioritize build reliability over
+  # this security recommendation. Base image versions are still pinned (ubuntu:22.04).
+  - DL3008
+
+# Trusted Registries
+# Only allow pulling from these registries
+trustedRegistries:
+  - docker.io
+  - gcr.io
+  - ghcr.io
+  - quay.io
