@@ -1,19 +1,6 @@
 # =============================================================================
 # Dockerfile: FastQC (Using Biocontainer)
 # =============================================================================
-#
-# PURPOSE:
-# This Dockerfile uses a pre-built FastQC container from Biocontainers.
-# FastQC is a Java/Perl application for quality control of sequencing data.
-#
-# WHY USE BIOCONTAINERS?
-# - Pre-built and tested by the bioinformatics community
-# - All dependencies (Java, Perl) included
-# - Consistent versions across different environments
-# - Regular security updates
-# - Avoids Perl module installation issues
-#
-# =============================================================================
 
 FROM quay.io/biocontainers/fastqc:0.12.1--hdfd78af_0
 
