@@ -422,7 +422,6 @@ jobs:
           fi
         env:
           NFT_DIFF: 'true'
-        continue-on-error: true
 
       # -----------------------------------------------------------------------
       # Upload test results
@@ -455,7 +454,7 @@ jobs:
     name: Deploy to EKS
     runs-on: ubuntu-latest
     needs: test  # Only deploy if tests pass
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && success()
     
     # -------------------------------------------------------------------------
     # Environment
