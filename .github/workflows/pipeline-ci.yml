@@ -253,6 +253,35 @@ jobs:
         continue-on-error: true
 
       # -----------------------------------------------------------------------
+      # Login to GitHub Container Registry (Fallback)
+      # -----------------------------------------------------------------------
+      # WHAT: Authenticates with GitHub's container registry
+      # WHY: Provides a free alternative when AWS ECR is not configured
+      # -----------------------------------------------------------------------
+      - name: Login to GitHub Container Registry
+        if: steps.login-ecr.outcome != 'success'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # Set registry URL
+      # -----------------------------------------------------------------------
+      # WHAT: Determines which registry to use (ECR or GHCR)
+      # WHY: Allows workflow to work with or without AWS credentials
+      # -----------------------------------------------------------------------
+      - name: Set registry URL
+        id: registry
+        run: |
+          if [ "${{ steps.login-ecr.outcome }}" == "success" ]; then
+            echo "url=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=ghcr.io/${{ github.repository_owner }}" >> $GITHUB_OUTPUT
+          fi
+
+      # -----------------------------------------------------------------------
       # Set up Docker Buildx
       # -----------------------------------------------------------------------
       # WHAT: Enables advanced Docker build features
@@ -279,7 +308,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY_PREFIX }}-${{ matrix.container.name }}
+          images: ${{ steps.registry.outputs.url }}/${{ env.ECR_REPOSITORY_PREFIX }}-${{ matrix.container.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
