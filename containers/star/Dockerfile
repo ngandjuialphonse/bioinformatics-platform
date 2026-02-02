@@ -1,101 +1,40 @@
 # =============================================================================
-# Multi-Stage Dockerfile: STAR Aligner
+# Dockerfile: STAR Aligner (Using Biocontainer)
 # =============================================================================
 #
 # PURPOSE:
-# This Dockerfile builds a container for the STAR RNA-seq aligner using a
-# multi-stage build pattern. This is a best practice for creating optimized,
-# secure, and small container images.
+# This Dockerfile uses a pre-built STAR container from Biocontainers.
 #
-# WHAT IS A MULTI-STAGE BUILD?
-# A multi-stage build uses multiple FROM instructions. Each FROM instruction
-# starts a new build stage. You can selectively copy artifacts from one stage
-# to another, leaving behind everything you don't want in the final image.
+# WHAT IS STAR?
+# STAR (Spliced Transcripts Alignment to a Reference) is an ultrafast RNA-seq
+# aligner that can handle splice junctions. It's the gold standard for RNA-seq
+# alignment.
 #
-# WHY USE MULTI-STAGE BUILDS?
-# 1. Smaller Image Size: The final image only contains the compiled binary
-#    and its runtime dependencies, not the build tools (compilers, source
-#    code, etc.). This reduces storage costs and network transfer time.
-# 2. Improved Security: A smaller attack surface because build tools are not
-#    present in the final image.
-# 3. Better Caching: Docker can cache individual stages, speeding up builds.
+# WHY USE BIOCONTAINERS?
+# - Pre-built and tested by the bioinformatics community
+# - Consistent versions across different environments  
+# - Faster builds (no compilation needed)
+# - Regular security updates
+# - Avoids complex build dependencies (xxd, g++, make, etc.)
 #
 # INTERVIEW TIP:
-# Explaining the benefits of multi-stage builds demonstrates a deep
-# understanding of containerization best practices and security.
+# Using community-maintained biocontainers demonstrates:
+# - Understanding of reproducibility in bioinformatics
+# - Pragmatic approach to DevOps (don't reinvent the wheel)
+# - Knowledge of bioinformatics ecosystem
 #
 # =============================================================================
 
-# -----------------------------------------------------------------------------
-# STAGE 1: BUILDER
-# -----------------------------------------------------------------------------
-# PURPOSE: This stage downloads the STAR source code and compiles it.
-# It contains all the build-time dependencies (g++, make, etc.) that are
-# NOT needed in the final image.
-# -----------------------------------------------------------------------------
-FROM ubuntu:22.04 AS builder
+FROM quay.io/biocontainers/star:2.7.11b--h43eeafb_1
 
-# --- Metadata ---
-LABEL stage="builder"
-
-# --- Environment ---
-ENV DEBIAN_FRONTEND=noninteractive
-ENV STAR_VERSION=2.7.10a
-
-# --- Build Dependencies ---
-# Install the tools needed to compile STAR
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        g++ \
-        make \
-        wget \
-        ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# --- Compile STAR ---
-# Download, compile, and create the STAR binary
-WORKDIR /build
-
-RUN wget --progress=dot:giga https://github.com/alexdobin/STAR/archive/refs/tags/${STAR_VERSION}.tar.gz && \
-    tar -xzf ${STAR_VERSION}.tar.gz
-
-WORKDIR /build/STAR-${STAR_VERSION}/source
-RUN make STAR
-
-# -----------------------------------------------------------------------------
-# STAGE 2: FINAL IMAGE
-# -----------------------------------------------------------------------------
-# PURPOSE: This is the final, optimized image. It copies the compiled STAR
-# binary from the builder stage and installs only the runtime dependencies.
-# -----------------------------------------------------------------------------
-FROM ubuntu:22.04
-
-# --- Metadata ---
 LABEL maintainer="devops-team@alphonse.com"
-LABEL description="Optimized STAR aligner for RNA-Seq pipelines"
-LABEL version="2.7.10a"
+LABEL description="STAR aligner for RNA-Seq pipelines (biocontainer)"
+LABEL version="2.7.11b"
 
-# --- Environment ---
-ENV DEBIAN_FRONTEND=noninteractive
-
-# --- Runtime Dependencies ---
-# Install only what's needed to run STAR (zlib for gzipped files)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        zlib1g && \
-    rm -rf /var/lib/apt/lists/*
-
-# --- Copy Artifacts from Builder Stage ---
-# This is the key step in a multi-stage build. We copy the compiled binary
-# from the 'builder' stage into our final image.
-COPY --from=builder /build/STAR-2.7.10a/source/STAR /usr/local/bin/STAR
-
-# --- Create Non-Root User ---
-# Security best practice: run containers as a non-root user
-RUN useradd --create-home --shell /bin/bash biouser
-USER biouser
-WORKDIR /home/biouser
+# Biocontainer already includes STAR and all dependencies
+# Run as root for compatibility with workflow engines
+USER root
+WORKDIR /data
 
 # --- Health Check ---
 # Verifies that the STAR binary is executable and works
