@@ -498,34 +498,8 @@ jobs:
             CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
             echo "Granting cluster access to: $CALLER_ARN"
             
-            # Create/update aws-auth ConfigMap to allow GitHub Actions access
-            kubectl get configmap aws-auth -n kube-system -o yaml > /tmp/aws-auth.yaml 2>/dev/null || true
-            
-            # If aws-auth doesn't exist or needs updating, patch it
-            cat <<EOF | kubectl apply -f - || true
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: aws-auth
-  namespace: kube-system
-data:
-  mapRoles: |
-    - rolearn: arn:aws:iam::251214541935:role/rnaseq-pipeline-cluster-role
-      username: system:node:{{EC2PrivateDNSName}}
-      groups:
-        - system:bootstrappers
-        - system:nodes
-    - rolearn: arn:aws:iam::251214541935:role/rnaseq-pipeline-node-role
-      username: system:node:{{EC2PrivateDNSName}}
-      groups:
-        - system:bootstrappers
-        - system:nodes
-  mapUsers: |
-    - userarn: arn:aws:iam::251214541935:user/bioinformatic-user
-      username: github-actions
-      groups:
-        - system:masters
-EOF
+            # Apply aws-auth ConfigMap to allow GitHub Actions access
+            kubectl apply -f k8s/aws-auth.yaml || echo "Warning: Could not update aws-auth ConfigMap"
           else
             echo "cluster_exists=false" >> $GITHUB_OUTPUT
           fi
