@@ -26,8 +26,9 @@ ENV FASTQC_VERSION=0.12.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget=1.21.2-2ubuntu1 \
-        unzip=6.0-26ubuntu3.1 && \
+        wget \
+        unzip \
+        ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

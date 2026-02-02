@@ -46,9 +46,9 @@ ENV STAR_VERSION=2.7.10a
 # Install the tools needed to compile STAR
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential=12.9ubuntu3 \
-        wget=1.21.2-2ubuntu1 \
-        ca-certificates=20230311ubuntu0.22.04.1 && \
+        build-essential \
+        wget \
+        ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Compile STAR ---
@@ -81,7 +81,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install only what's needed to run STAR (zlib for gzipped files)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        zlib1g=1:1.2.11.dfsg-2ubuntu9.2 && \
+        zlib1g && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Copy Artifacts from Builder Stage ---
