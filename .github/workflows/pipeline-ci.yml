@@ -259,7 +259,7 @@ jobs:
       # WHY: Provides a free alternative when AWS ECR is not configured
       # -----------------------------------------------------------------------
       - name: Login to GitHub Container Registry
-        if: steps.login-ecr.outcome != 'success'
+        if: always() && (steps.login-ecr.outcome != 'success')
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
