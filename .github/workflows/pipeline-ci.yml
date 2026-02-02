@@ -486,11 +486,11 @@ jobs:
     # WHAT: Specifies the deployment environment
     # WHY: Enables environment-specific configurations and approvals
     #
-    # BEST PRACTICE: Use GitHub Environments for deployment protection rules
+    # NOTE: This is a batch processing pipeline (not a web app)
+    # No URL is provided because there's no web interface
     # -------------------------------------------------------------------------
     environment:
       name: dev
-      url: https://rnaseq-pipeline-dev.example.com
 
     steps:
       - name: Checkout repository
