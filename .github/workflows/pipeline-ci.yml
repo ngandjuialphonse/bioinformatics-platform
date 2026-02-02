@@ -488,25 +488,37 @@ jobs:
       # -----------------------------------------------------------------------
       # WHAT: Configures kubectl to communicate with our EKS cluster
       # WHY: Required to deploy Kubernetes resources
-      # NOTE: This will fail gracefully if cluster doesn't exist yet
       # -----------------------------------------------------------------------
       - name: Update kubeconfig
         id: kubeconfig
         run: |
-          aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }} || echo "cluster_exists=false" >> $GITHUB_OUTPUT
-          if kubectl cluster-info &> /dev/null; then
-            echo "cluster_exists=true" >> $GITHUB_OUTPUT
+          # Try to update kubeconfig
+          if aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "✅ Successfully configured kubectl for EKS cluster"
             
             # Grant current IAM user/role access to the cluster
             CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
             echo "Granting cluster access to: $CALLER_ARN"
             
             # Apply aws-auth ConfigMap to allow GitHub Actions access
-            kubectl apply -f k8s/aws-auth.yaml || echo "Warning: Could not update aws-auth ConfigMap"
+            if kubectl apply -f k8s/aws-auth.yaml 2>/dev/null; then
+              echo "✅ Updated aws-auth ConfigMap"
+            else
+              echo "⚠️  Could not update aws-auth ConfigMap (may already be configured)"
+            fi
+            
+            # Verify cluster access
+            if kubectl cluster-info 2>/dev/null; then
+              echo "cluster_exists=true" >> $GITHUB_OUTPUT
+              echo "✅ Cluster is accessible"
+            else
+              echo "cluster_exists=false" >> $GITHUB_OUTPUT
+              echo "❌ Cluster exists but not accessible (RBAC issue)"
+            fi
           else
             echo "cluster_exists=false" >> $GITHUB_OUTPUT
+            echo "❌ EKS cluster not found"
           fi
-        continue-on-error: true
 
       # -----------------------------------------------------------------------
       # Deploy Kubernetes resources
