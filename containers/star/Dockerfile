@@ -46,19 +46,20 @@ ENV STAR_VERSION=2.7.10a
 # Install the tools needed to compile STAR
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        wget \
-        ca-certificates && \
+        build-essential=12.9ubuntu3 \
+        wget=1.21.2-2ubuntu1 \
+        ca-certificates=20230311ubuntu0.22.04.1 && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Compile STAR ---
 # Download, compile, and create the STAR binary
 WORKDIR /build
 
-RUN wget https://github.com/alexdobin/STAR/archive/refs/tags/${STAR_VERSION}.tar.gz && \
-    tar -xzf ${STAR_VERSION}.tar.gz && \
-    cd STAR-${STAR_VERSION}/source && \
-    make STAR
+RUN wget --progress=dot:giga https://github.com/alexdobin/STAR/archive/refs/tags/${STAR_VERSION}.tar.gz && \
+    tar -xzf ${STAR_VERSION}.tar.gz
+
+WORKDIR /build/STAR-${STAR_VERSION}/source
+RUN make STAR
 
 # -----------------------------------------------------------------------------
 # STAGE 2: FINAL IMAGE
@@ -80,7 +81,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install only what's needed to run STAR (zlib for gzipped files)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        zlib1g && \
+        zlib1g=1:1.2.11.dfsg-2ubuntu9.2 && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Copy Artifacts from Builder Stage ---

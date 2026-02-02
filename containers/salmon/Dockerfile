@@ -29,15 +29,15 @@ ENV SALMON_VERSION=1.10.2
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        cmake \
-        wget \
-        ca-certificates && \
+        build-essential=12.9ubuntu3 \
+        cmake=3.22.1-1ubuntu1.22.04.2 \
+        wget=1.21.2-2ubuntu1 \
+        ca-certificates=20230311ubuntu0.22.04.1 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-RUN wget https://github.com/COMBINE-lab/salmon/releases/download/v${SALMON_VERSION}/salmon-${SALMON_VERSION}_linux_x86_64.tar.gz && \
+RUN wget --progress=dot:giga https://github.com/COMBINE-lab/salmon/releases/download/v${SALMON_VERSION}/salmon-${SALMON_VERSION}_linux_x86_64.tar.gz && \
     tar -xzf salmon-${SALMON_VERSION}_linux_x86_64.tar.gz
 
 # -----------------------------------------------------------------------------
@@ -52,8 +52,8 @@ LABEL version="1.10.2"
 # --- Runtime Dependencies ---
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        libboost-all-dev \
-        tbb && \
+        libboost-all-dev=1.74.0.3ubuntu7 \
+        tbb=2021.5.0-7ubuntu2 && \
     rm -rf /var/lib/apt/lists/*
 
 # --- Copy Artifacts from Builder Stage ---

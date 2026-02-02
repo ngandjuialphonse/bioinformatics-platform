@@ -26,13 +26,13 @@ ENV FASTQC_VERSION=0.12.1
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget \
-        unzip && \
+        wget=1.21.2-2ubuntu1 \
+        unzip=6.0-26ubuntu3.1 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN wget https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v${FASTQC_VERSION}.zip && \
+RUN wget --progress=dot:giga https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v${FASTQC_VERSION}.zip && \
     unzip fastqc_v${FASTQC_VERSION}.zip
 
 # -----------------------------------------------------------------------------
