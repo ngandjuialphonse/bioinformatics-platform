@@ -89,6 +89,7 @@ permissions:
   contents: read
   packages: write
   security-events: write  # Required for CodeQL SARIF upload
+  checks: write  # Required for publishing test results
 
 # -----------------------------------------------------------------------------
 # JOBS
@@ -374,7 +375,10 @@ jobs:
       - name: Install nf-test
         run: |
           wget -qO- https://github.com/askimed/nf-test/releases/download/v${{ env.NF_TEST_VERSION }}/nf-test-${{ env.NF_TEST_VERSION }}.tar.gz | tar -xz
+          mkdir -p $HOME/.nf-test
+          mv nf-test.jar $HOME/.nf-test/
           sudo mv nf-test /usr/local/bin/
+          chmod +x /usr/local/bin/nf-test
           nf-test version
 
       # -----------------------------------------------------------------------
