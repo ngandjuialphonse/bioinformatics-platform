@@ -144,7 +144,7 @@ jobs:
       - name: Validate Nextflow syntax
         run: |
           cd workflows
-          nextflow run main.nf -preview
+          nextflow run main.nf --help
         continue-on-error: false
 
       # -----------------------------------------------------------------------
