@@ -28,7 +28,7 @@
 nextflow_workflow {
 
     name "Test Complete RNA-Seq Pipeline"
-    script "../workflows/main.nf"
+    script "../../workflows/main.nf"
     workflow "RNASEQ_PIPELINE"
 
     /*

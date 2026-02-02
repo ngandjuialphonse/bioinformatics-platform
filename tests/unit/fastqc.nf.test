@@ -39,7 +39,7 @@ nextflow_process {
      * WHERE: Path to the main workflow file containing the process
      */
     name "Test FASTQC Process"
-    script "../workflows/main.nf"
+    script "../../workflows/main.nf"
     process "FASTQC"
 
     /*

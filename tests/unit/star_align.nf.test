@@ -39,7 +39,7 @@
 nextflow_process {
 
     name "Test STAR Alignment Process"
-    script "../workflows/main.nf"
+    script "../../workflows/main.nf"
     process "STAR_ALIGN"
 
     /*

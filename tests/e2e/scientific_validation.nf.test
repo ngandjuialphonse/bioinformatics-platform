@@ -27,7 +27,7 @@
 nextflow_workflow {
 
     name "Scientific Validation Test"
-    script "../workflows/main.nf"
+    script "../../workflows/main.nf"
     workflow "RNASEQ_PIPELINE"
 
     /*

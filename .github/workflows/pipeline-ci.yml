@@ -437,18 +437,6 @@ jobs:
           name: test-results
           path: tests/test-results.tap
 
-      # -----------------------------------------------------------------------
-      # Publish test results
-      # -----------------------------------------------------------------------
-      # WHAT: Displays test results in the GitHub UI
-      # WHY: Makes it easy to see which tests passed/failed
-      # -----------------------------------------------------------------------
-      - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        if: always()
-        with:
-          files: tests/test-results.tap
-
   # ===========================================================================
   # JOB 4: DEPLOY TO KUBERNETES
   # ===========================================================================
@@ -505,6 +493,39 @@ jobs:
           aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }} || echo "cluster_exists=false" >> $GITHUB_OUTPUT
           if kubectl cluster-info &> /dev/null; then
             echo "cluster_exists=true" >> $GITHUB_OUTPUT
+            
+            # Grant current IAM user/role access to the cluster
+            CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
+            echo "Granting cluster access to: $CALLER_ARN"
+            
+            # Create/update aws-auth ConfigMap to allow GitHub Actions access
+            kubectl get configmap aws-auth -n kube-system -o yaml > /tmp/aws-auth.yaml 2>/dev/null || true
+            
+            # If aws-auth doesn't exist or needs updating, patch it
+            cat <<EOF | kubectl apply -f - || true
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    - rolearn: arn:aws:iam::251214541935:role/rnaseq-pipeline-cluster-role
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+    - rolearn: arn:aws:iam::251214541935:role/rnaseq-pipeline-node-role
+      username: system:node:{{EC2PrivateDNSName}}
+      groups:
+        - system:bootstrappers
+        - system:nodes
+  mapUsers: |
+    - userarn: arn:aws:iam::251214541935:user/bioinformatic-user
+      username: github-actions
+      groups:
+        - system:masters
+EOF
           else
             echo "cluster_exists=false" >> $GITHUB_OUTPUT
           fi
