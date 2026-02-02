@@ -1,18 +1,6 @@
 # =============================================================================
 # Multi-Stage Dockerfile: MultiQC
 # =============================================================================
-#
-# PURPOSE:
-# This Dockerfile builds a container for MultiQC, a tool that aggregates
-# results from bioinformatics analyses across many samples into a single
-# HTML report.
-#
-# WHY MULTIQC?
-# - Visualization: Provides interactive plots for comparing QC metrics.
-# - Standardization: Creates a consistent report format for all your pipelines.
-# - Extensibility: Supports a wide range of bioinformatics tools.
-#
-# =============================================================================
 
 # -----------------------------------------------------------------------------
 # STAGE 1: BUILDER
