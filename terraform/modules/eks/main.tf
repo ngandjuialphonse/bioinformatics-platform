@@ -28,10 +28,6 @@ resource "aws_eks_cluster" "main" {
   }
 
   tags = var.tags
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy
-  ]
 }
 
 # -----------------------------------------------------------------------------
@@ -60,8 +56,16 @@ resource "aws_eks_node_group" "main" {
     desired_size = each.value.desired_size
   }
 
-  labels = each.value.labels
-  taints = each.value.taints
+  labels = lookup(each.value, "labels", {})
+
+  dynamic "taint" {
+    for_each = lookup(each.value, "taints", [])
+    content {
+      key    = taint.value.key
+      value  = taint.value.value
+      effect = taint.value.effect
+    }
+  }
 
   tags = merge(
     var.tags,
@@ -69,12 +73,6 @@ resource "aws_eks_node_group" "main" {
       "Name" = "${var.cluster_name}-${each.key}-node"
     }
   )
-
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_worker_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.ecr_read_only_policy
-  ]
 }
 
 # -----------------------------------------------------------------------------
