@@ -497,10 +497,18 @@ jobs:
       # -----------------------------------------------------------------------
       # WHAT: Configures kubectl to communicate with our EKS cluster
       # WHY: Required to deploy Kubernetes resources
+      # NOTE: This will fail gracefully if cluster doesn't exist yet
       # -----------------------------------------------------------------------
       - name: Update kubeconfig
+        id: kubeconfig
         run: |
-          aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }}
+          aws eks update-kubeconfig --name rnaseq-pipeline-cluster --region ${{ env.AWS_REGION }} || echo "cluster_exists=false" >> $GITHUB_OUTPUT
+          if kubectl cluster-info &> /dev/null; then
+            echo "cluster_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "cluster_exists=false" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
 
       # -----------------------------------------------------------------------
       # Deploy Kubernetes resources
@@ -513,8 +521,11 @@ jobs:
       # 2. RBAC (permissions for the pipeline)
       # 3. Storage (PVCs for data)
       # 4. Resource quotas (cost control)
+      #
+      # CONDITIONAL: Only runs if EKS cluster exists
       # -----------------------------------------------------------------------
       - name: Deploy to Kubernetes
+        if: steps.kubeconfig.outputs.cluster_exists == 'true'
         run: |
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/rbac.yaml
@@ -526,11 +537,25 @@ jobs:
       # -----------------------------------------------------------------------
       # WHAT: Checks that the deployment was successful
       # WHY: Catches deployment failures early
+      # CONDITIONAL: Only runs if deployment occurred
       # -----------------------------------------------------------------------
       - name: Verify deployment
+        if: steps.kubeconfig.outputs.cluster_exists == 'true'
         run: |
           kubectl get all -n rnaseq-pipeline
           kubectl get pvc -n rnaseq-pipeline
+
+      # -----------------------------------------------------------------------
+      # Skip deployment notice
+      # -----------------------------------------------------------------------
+      # WHAT: Logs a message when cluster is not available
+      # WHY: Makes it clear why deployment was skipped
+      # -----------------------------------------------------------------------
+      - name: Skip deployment (cluster not ready)
+        if: steps.kubeconfig.outputs.cluster_exists != 'true'
+        run: |
+          echo "⚠️  EKS cluster not found. Skipping deployment."
+          echo "Run 'terraform apply' in terraform/environments/dev/ to create the cluster."
 
   # ===========================================================================
   # JOB 5: SECURITY SCANNING
