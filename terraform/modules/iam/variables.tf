@@ -27,6 +27,12 @@ variable "aws_region" {
   type        = string
 }
 
+variable "reports_bucket_arn" {
+  description = "The ARN of the S3 bucket for pipeline reports."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "A map of tags to apply to all resources."
   type        = map(string)

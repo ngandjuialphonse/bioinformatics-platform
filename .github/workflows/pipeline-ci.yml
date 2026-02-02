@@ -75,6 +75,7 @@ env:
   ECR_REPOSITORY_PREFIX: rnaseq-pipeline
   NEXTFLOW_VERSION: '23.10.0'
   NF_TEST_VERSION: '0.8.4'
+  S3_REPORTS_BUCKET: rnaseq-pipeline-reports  # S3 bucket for pipeline reports
 
 # -----------------------------------------------------------------------------
 # PERMISSIONS

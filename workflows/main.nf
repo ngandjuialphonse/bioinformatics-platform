@@ -517,6 +517,31 @@ workflow {
  * Print summary when pipeline finishes
  */
 workflow.onComplete {
+    // Upload reports to S3 if configured
+    def s3_url = null
+    if (workflow.success && params.s3_bucket) {
+        def timestamp = new java.text.SimpleDateFormat('yyyy-MM-dd_HH-mm-ss').format(new java.util.Date())
+        def s3_path = "s3://${params.s3_bucket}/${params.s3_prefix}/${workflow.runName}_${timestamp}"
+        
+        log.info "Uploading reports to S3: ${s3_path}"
+        
+        try {
+            // Upload results to S3
+            def upload_cmd = "aws s3 sync ${params.outdir} ${s3_path} --exclude '*' --include 'multiqc_report.html' --include 'multiqc_data/*'"
+            def proc = upload_cmd.execute()
+            proc.waitFor()
+            
+            if (proc.exitValue() == 0) {
+                s3_url = "${s3_path}/multiqc_report.html"
+                log.info "✓ Reports uploaded successfully to S3"
+            } else {
+                log.warn "⚠ Failed to upload to S3: ${proc.err.text}"
+            }
+        } catch (Exception e) {
+            log.warn "⚠ S3 upload error: ${e.message}"
+        }
+    }
+    
     log.info """
     ╔═══════════════════════════════════════════════════════════════╗
     ║           Pipeline Execution Complete!                        ║
@@ -532,15 +557,14 @@ workflow.onComplete {
       FastQC:     ${params.outdir}/fastqc/
       Aligned:    ${params.outdir}/aligned/
       Counts:     ${params.outdir}/counts/
-    
+    ${s3_url ? "\n    S3 Location:\n      ${s3_url}\n      (Generate presigned URL: aws s3 presign ${s3_url} --expires-in 3600)" : ""}
     DevOps Note:
       This pipeline processed your RNA-Seq data through:
         1. Quality Control (FastQC)
         2. Alignment (STAR)
         3. Quantification (Salmon/featureCounts)
         4. Report Generation (MultiQC)
-      
-      Open ${params.outdir}/multiqc_report.html in a browser to view results!
+      ${s3_url ? "\n      Reports available in S3 for download!" : "\n      Open ${params.outdir}/multiqc_report.html in a browser to view results!"}
     
     ═══════════════════════════════════════════════════════════════
     """.stripIndent()

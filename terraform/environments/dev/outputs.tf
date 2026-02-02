@@ -30,3 +30,13 @@ output "vpc_id" {
   description = "The ID of the VPC."
   value       = module.vpc.vpc_id
 }
+
+output "s3_reports_bucket" {
+  description = "The name of the S3 bucket for pipeline reports."
+  value       = module.s3_reports.bucket_name
+}
+
+output "s3_reports_bucket_arn" {
+  description = "The ARN of the S3 bucket for pipeline reports."
+  value       = module.s3_reports.bucket_arn
+}

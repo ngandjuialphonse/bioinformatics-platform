@@ -152,6 +152,19 @@ resource "aws_iam_policy" "github_actions_policy" {
           "eks:DescribeCluster"
         ],
         Resource = "arn:aws:eks:${var.aws_region}:${var.aws_account_id}:cluster/${var.project_name}-cluster"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ],
+        Resource = [
+          "${var.reports_bucket_arn}",
+          "${var.reports_bucket_arn}/*"
+        ]
       }
     ]
   })

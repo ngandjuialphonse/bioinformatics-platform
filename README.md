@@ -69,6 +69,14 @@ terraform plan
 terraform apply
 ```
 
+### Accessing Pipeline Reports
+
+MultiQC reports are automatically uploaded to S3 for persistent storage. See **[S3 Reports Setup Guide](./docs/S3_REPORTS_SETUP.md)** for:
+- Setting up the S3 bucket
+- Running pipelines with S3 upload
+- Generating presigned URLs to view reports
+- Cost optimization strategies
+
 ## Interview Talking Points
 
 Each learning module contains specific "Interview Talking Points" that you can use to guide a conversation in a technical interview. The goal is not just to say "I built a pipeline," but to explain the engineering decisions and trade-offs you made, demonstrating a senior level of understanding.

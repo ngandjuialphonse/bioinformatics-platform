@@ -129,11 +129,12 @@ module "ecr" {
 module "iam" {
   source = "../../modules/iam"
 
-  project_name      = var.project_name
-  aws_account_id    = data.aws_caller_identity.current.account_id
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  aws_region        = var.aws_region
-  github_repo       = var.github_repo
+  project_name       = var.project_name
+  aws_account_id     = data.aws_caller_identity.current.account_id
+  oidc_provider_arn  = module.eks.oidc_provider_arn
+  aws_region         = var.aws_region
+  github_repo        = var.github_repo
+  reports_bucket_arn = module.s3_reports.bucket_arn
 
   tags = {
     Project     = var.project_name
@@ -142,7 +143,20 @@ module "iam" {
 }
 
 # -----------------------------------------------------------------------------
-# Module 4: Elastic Kubernetes Service (EKS)
+# Module 4: S3 Reports Bucket
+# -----------------------------------------------------------------------------
+# WHAT: Creates an S3 bucket for storing pipeline reports
+# WHY: Persistent storage for MultiQC reports and results
+# -----------------------------------------------------------------------------
+module "s3_reports" {
+  source = "../../modules/s3"
+
+  bucket_name = "${var.project_name}-reports"
+  environment = "dev"
+}
+
+# -----------------------------------------------------------------------------
+# Module 5: Elastic Kubernetes Service (EKS)
 # -----------------------------------------------------------------------------
 # WHAT: Creates a managed Kubernetes cluster
 # WHY: EKS handles the complexity of running a Kubernetes control plane,
