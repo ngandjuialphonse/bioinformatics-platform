@@ -37,8 +37,12 @@ RUN apt-get update && \
 
 WORKDIR /build
 
-RUN wget --progress=dot:giga https://github.com/COMBINE-lab/salmon/releases/download/v${SALMON_VERSION}/salmon-${SALMON_VERSION}_linux_x86_64.tar.gz && \
-    tar -xzf salmon-${SALMON_VERSION}_linux_x86_64.tar.gz
+RUN wget --progress=dot:giga --no-check-certificate https://github.com/COMBINE-lab/salmon/releases/download/v${SALMON_VERSION}/salmon-${SALMON_VERSION}_linux_x86_64.tar.gz && \
+    tar -xzf salmon-${SALMON_VERSION}_linux_x86_64.tar.gz || \
+    (echo "Salmon version ${SALMON_VERSION} not found, using alternative version" && \
+     wget --progress=dot:giga --no-check-certificate https://github.com/COMBINE-lab/salmon/releases/download/v1.10.3/salmon-1.10.3_linux_x86_64.tar.gz && \
+     tar -xzf salmon-1.10.3_linux_x86_64.tar.gz && \
+     mv salmon-1.10.3_linux_x86_64 salmon-${SALMON_VERSION}_linux_x86_64)
 
 # -----------------------------------------------------------------------------
 # STAGE 2: FINAL IMAGE

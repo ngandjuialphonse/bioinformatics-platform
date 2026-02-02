@@ -47,6 +47,8 @@ ENV STAR_VERSION=2.7.10a
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
+        g++ \
+        make \
         wget \
         ca-certificates && \
     rm -rf /var/lib/apt/lists/*
