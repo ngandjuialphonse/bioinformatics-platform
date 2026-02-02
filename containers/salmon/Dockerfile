@@ -18,7 +18,7 @@
 #
 # =============================================================================
 
-FROM quay.io/biocontainers/salmon:1.10.3--h8b2e3c8_1
+FROM quay.io/biocontainers/salmon:1.10.3--h45fbf2d_5
 
 LABEL maintainer="devops-team@alphonse.com"
 LABEL description="Salmon for transcript quantification (biocontainer)"
