@@ -440,6 +440,18 @@ jobs:
           name: test-results
           path: tests/test-results.tap
 
+      # -----------------------------------------------------------------------
+      # Publish test results to GitHub UI
+      # -----------------------------------------------------------------------
+      # WHAT: Displays test results in GitHub Actions UI
+      # WHY: Makes it easy to see which tests passed/failed
+      # -----------------------------------------------------------------------
+      - name: Publish test report
+        uses: pcolby/tap-summary@v1
+        if: always()
+        with:
+          path: tests/test-results.tap
+
   # ===========================================================================
   # JOB 4: DEPLOY TO KUBERNETES
   # ===========================================================================
