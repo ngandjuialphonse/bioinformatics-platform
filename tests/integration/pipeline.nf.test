@@ -17,11 +17,6 @@
  * - Unit tests can pass while integration fails (interface mismatches)
  * - Catches issues with data format compatibility
  * - Validates the pipeline as users will actually run it
- *
- * INTERVIEW TIP:
- * Explain the testing pyramid: many unit tests, fewer integration tests,
- * even fewer E2E tests. Each level catches different types of bugs.
- *
  * =============================================================================
  */
 
