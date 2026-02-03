@@ -16,12 +16,6 @@
  * VALIDATION STRATEGY:
  * We use a "gold standard" dataset where the expected results are known.
  * The pipeline output is compared against these expected results.
- *
- * INTERVIEW TIP:
- * Be prepared to discuss how you would validate a bioinformatics pipeline.
- * This demonstrates scientific rigor, not just engineering skills.
- *
- * =============================================================================
  */
 
 nextflow_workflow {
