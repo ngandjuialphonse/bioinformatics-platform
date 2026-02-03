@@ -367,27 +367,3 @@ spec:
 #   echo "test" > /data/test.txt
 #   ls -la /data/
 
----
-# DEVOPS INTERVIEW TALKING POINTS
-# ================================
-#
-# "I configured ReadWriteMany PVCs for shared genomic data"
-#   - Understood the requirement for parallel access
-#   - Chose appropriate storage backend (EFS/Filestore)
-#   - Configured proper access modes
-#
-# "I implemented cost optimization strategies"
-#   - Used tiered storage (hot vs. cold data)
-#   - Set up lifecycle policies for data retention
-#   - Monitored storage usage and costs
-#
-# "I understand the trade-offs between storage types"
-#   - EBS: Fast but ReadWriteOnce only
-#   - EFS: ReadWriteMany but more expensive
-#   - S3: Cheap but not POSIX filesystem
-#
-# "I know how to troubleshoot storage issues"
-#   - Check PVC status and events
-#   - Test mounting with debug pods
-#   - Monitor performance metrics
-#   - Understand security contexts and permissions
