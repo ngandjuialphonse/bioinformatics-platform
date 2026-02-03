@@ -33,16 +33,6 @@ metadata:
   
   annotations:
     description: "Service account for Nextflow pipeline orchestration"
-    
-    # Optional: Link to AWS IAM role (for EKS with IRSA)
-    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/nextflow-role
-    
-    # Optional: Link to GCP service account (for GKE with Workload Identity)
-    # iam.gke.io/gcp-service-account: nextflow@project-id.iam.gserviceaccount.com
-
-# DEVOPS NOTE:
-# In production, you might link this ServiceAccount to a cloud IAM role
-# to access cloud resources (S3, GCS, etc.) without storing credentials
 
 ---
 # 2. ROLE
@@ -66,8 +56,6 @@ rules:
   # ============================================================================
   # RULE 1: Pod Management
   # ============================================================================
-  # WHY: Nextflow needs to create, monitor, and delete worker pods
-  # ANALOGY: Like Jenkins creating build agents
   #
   - apiGroups: [""]  # "" = core API group
     resources: 
@@ -82,15 +70,9 @@ rules:
       - delete         # Delete completed worker pods
       - patch          # Update pod metadata (labels, annotations)
   
-  # DEVOPS NOTE:
-  # We don't give 'update' permission - pods are immutable once created
-  # We use 'patch' only for metadata updates (labels, annotations)
-  
   # ============================================================================
   # RULE 2: Pod Execution
   # ============================================================================
-  # WHY: Nextflow needs to execute commands in pods (for debugging)
-  # ANALOGY: Like SSH access to EC2 instances
   #
   - apiGroups: [""]
     resources:
@@ -98,16 +80,10 @@ rules:
     verbs:
       - create         # Create exec sessions
   
-  # DEVOPS NOTE:
-  # This is optional but useful for debugging
-  # Remove in production if not needed (security)
   
   # ============================================================================
   # RULE 3: Storage Access
   # ============================================================================
-  # WHY: Nextflow needs to mount PVCs to worker pods
-  # ANALOGY: Like mounting EBS volumes to EC2 instances
-  #
   - apiGroups: [""]
     resources:
       - persistentvolumeclaims  # PVCs for shared data
@@ -115,15 +91,10 @@ rules:
       - get            # Read PVC details
       - list           # List available PVCs
   
-  # DEVOPS NOTE:
-  # We only give read permissions - PVCs are created separately
-  # Nextflow just needs to reference them when creating pods
   
   # ============================================================================
   # RULE 4: ConfigMaps and Secrets (Optional)
   # ============================================================================
-  # WHY: For passing configuration and credentials to worker pods
-  # ANALOGY: Like AWS Systems Manager Parameter Store
   #
   - apiGroups: [""]
     resources:
@@ -133,15 +104,10 @@ rules:
       - get            # Read config/secrets
       - list           # List available config/secrets
   
-  # DEVOPS NOTE:
-  # Only include this if your pipeline needs to access ConfigMaps/Secrets
-  # For example: API keys for external services, database credentials
   
   # ============================================================================
   # RULE 5: Service Access (Optional)
   # ============================================================================
-  # WHY: If worker pods need to communicate with each other
-  # ANALOGY: Like service discovery in microservices
   #
   - apiGroups: [""]
     resources:
@@ -149,19 +115,12 @@ rules:
     verbs:
       - get            # Read service details
       - list           # List available services
-  
-  # DEVOPS NOTE:
-  # Only needed if your pipeline has inter-pod communication
-  # Most bioinformatics pipelines don't need this
 
 ---
 # 3. ROLE BINDING
 # ===============
 # Connects the ServiceAccount to the Role
 # Says: "nextflow-sa CAN DO everything in nextflow-role"
-#
-# DEVOPS ANALOGY:
-# Like attaching an IAM policy to a user/role in AWS
 #
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -187,10 +146,6 @@ roleRef:
   kind: Role
   name: nextflow-role
   apiGroup: rbac.authorization.k8s.io
-
-# DEVOPS NOTE:
-# This is a RoleBinding (namespace-scoped)
-# For cluster-wide permissions, use ClusterRoleBinding
 
 ---
 # ============================================================================
@@ -270,26 +225,3 @@ roleRef:
 #   # View all permissions for ServiceAccount
 #   kubectl auth can-i --list --as=system:serviceaccount:bioinformatics:nextflow-sa -n bioinformatics
 
----
-# DEVOPS INTERVIEW TALKING POINTS
-# ================================
-#
-# "I implemented RBAC for Nextflow to manage ephemeral pods"
-#   - Created ServiceAccount with least-privilege permissions
-#   - Limited scope to namespace (not cluster-wide)
-#   - Followed security best practices
-#
-# "I understand the difference between Role and ClusterRole"
-#   - Role: namespace-scoped (used here)
-#   - ClusterRole: cluster-wide (for cluster-level resources)
-#
-# "I know how to debug RBAC issues"
-#   - Use kubectl auth can-i to test permissions
-#   - Check audit logs for forbidden errors
-#   - Understand the relationship between SA, Role, and RoleBinding
-#
-# "I implemented security controls"
-#   - Principle of least privilege
-#   - Namespace isolation
-#   - Resource quotas
-#   - Pod security standards
