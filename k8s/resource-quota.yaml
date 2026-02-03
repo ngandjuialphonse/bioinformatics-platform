@@ -160,10 +160,6 @@ spec:
 #   - ResourceQuota: Total limits for the namespace
 #   - LimitRange: Per-pod/container limits
 #
-# DEVOPS ANALOGY:
-#   - ResourceQuota: Total AWS account limits
-#   - LimitRange: Per-instance limits (e.g., max t3.2xlarge)
-#
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -360,29 +356,3 @@ spec:
 #   - 100 CPUs = 13 instances = $4.33/hour = $3,118/month (24/7)
 #   - With autoscaling (8 hours/day): $1,039/month (67% savings!)
 #   - With spot instances: $312/month (90% savings!)
-
----
-# DEVOPS INTERVIEW TALKING POINTS
-# ================================
-#
-# "I implemented resource quotas to prevent runaway jobs"
-#   - Set namespace-level limits (ResourceQuota)
-#   - Set per-pod limits (LimitRange)
-#   - Monitored usage and adjusted as needed
-#
-# "I understand the difference between requests and limits"
-#   - Requests: Guaranteed resources (for scheduling)
-#   - Limits: Maximum resources (for enforcement)
-#   - Set requests = typical, limits = peak
-#
-# "I optimized costs with resource management"
-#   - Right-sized pod resources (no over-provisioning)
-#   - Used spot instances (70-90% savings)
-#   - Implemented auto-scaling (scale to zero when idle)
-#   - Set up cost monitoring and alerts
-#
-# "I know how to troubleshoot resource issues"
-#   - Check quota usage (kubectl describe resourcequota)
-#   - Monitor pod resources (kubectl top pods)
-#   - Investigate OOMKilled pods (check limits)
-#   - Debug pending pods (check quota and node capacity)
