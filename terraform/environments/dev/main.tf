@@ -1,35 +1,6 @@
 # =============================================================================
 # Terraform Main Configuration - Development Environment
 # =============================================================================
-#
-# PURPOSE:
-# This file is the entrypoint for provisioning the complete AWS infrastructure
-# for the development environment using Terraform. It demonstrates Infrastructure
-# as Code (IaC), a core DevOps practice.
-#
-# WHAT IS TERRAFORM?
-# Terraform is an open-source IaC tool that allows you to define and provision
-# infrastructure using a declarative configuration language. It treats your
-# infrastructure like software - versioned, repeatable, and automated.
-#
-# WHY TERRAFORM FOR BIOINFORMATICS?
-# 1. Reproducibility: Ensures consistent environments for pipeline execution
-# 2. Scalability: Easily scale up/down compute resources as needed
-# 3. Cost Management: Define resource limits and track costs
-# 4. Automation: Integrate infrastructure provisioning into CI/CD pipelines
-#
-# INTERVIEW TIP:
-# Be prepared to explain why IaC is critical for production bioinformatics.
-# It shows you think about the entire lifecycle, not just the pipeline code.
-#
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# Terraform and Provider Configuration
-# -----------------------------------------------------------------------------
-# WHAT: Specifies the required Terraform version and cloud provider (AWS)
-# WHY: Ensures compatibility and defines where resources will be created
-# -----------------------------------------------------------------------------
 terraform {
   required_version = ">= 1.0"
 
